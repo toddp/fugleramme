@@ -8,6 +8,7 @@ recorded, and labels folded to artwork keys by an aliases file.
 
 from __future__ import annotations
 
+import csv
 import json
 import time as systime
 from datetime import UTC, datetime, timedelta
@@ -19,6 +20,7 @@ import pytest
 from fugleramme import languages
 from fugleramme.api import ApiSource, Configured
 from fugleramme.camera import CameraSource
+from fugleramme.names import normalize
 from fugleramme.settings import Settings, SettingsStore
 from fugleramme.source import BIRDNET_GO, CAMERA, Unavailable
 
@@ -261,3 +263,21 @@ def test_a_camera_log_offers_only_its_own_labels_and_no_failure(tmp_path):
     assert languages.catalog(tmp_path) == {"sci": "Scientific"}
     assert languages.catalog_failure() == ""
     assert languages.dictionary("en", tmp_path) == ({}, "")
+
+
+# -- sizes --------------------------------------------------------------------
+
+# The keys a camera's aliases fold to that `bird_sizes.csv` carries a mass for.
+CAMERA_KEYS = (
+    "bear", "cat", "chipmunk", "coyote", "deer", "dog", "fox", "groundhog", "opossum",
+    "rabbit", "raccoon", "skunk", "squirrel", "turkey",
+)  # fmt: skip
+
+
+def test_every_camera_key_has_a_body_mass():
+    """Without its row an animal is drawn at the median bird's 35.5 g: a deer
+    the size of a sparrow."""
+    sizes = Path(__file__).resolve().parents[1] / "assets" / "bird_sizes.csv"
+    with sizes.open() as handle:
+        masses = {normalize(row["scientific_name"]) for row in csv.DictReader(handle)}
+    assert [key for key in CAMERA_KEYS if key not in masses] == []

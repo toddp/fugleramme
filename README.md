@@ -192,7 +192,8 @@ Fugleramme shares no code or art with them.
   [`assets/fonts/ATTRIBUTION.md`](assets/fonts/ATTRIBUTION.md).
 - Bird sizes (`assets/bird_sizes.csv`): body mass from AVONET (Tobias et al.
   2022, Ecology Letters, [doi:10.1111/ele.13898](https://doi.org/10.1111/ele.13898)),
-  CC BY 4.0.
+  CC BY 4.0. The lowercase rows at its end, for a wildlife camera's animals, are
+  typical adult masses added by hand.
 - BirdNET scientific-name aliases (`assets/birdnet_aliases.json`):
   [OpenFauna](https://github.com/tphakala/openfauna)'s compiled taxonomic alias
   map, CC BY-SA 4.0 - see [`assets/ATTRIBUTION.md`](assets/ATTRIBUTION.md).

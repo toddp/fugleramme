@@ -2,6 +2,8 @@
 
 Body mass (grams) per species from AVONET (Tobias et al. 2022, Ecology Letters,
 CC BY 4.0), vendored as `assets/bird_sizes.csv` keyed by eBird scientific name.
+The lowercase rows at its end are not AVONET's: typical adult masses for the
+keys a wildlife camera's aliases fold to (`camera.py`), "deer" or "rabbit".
 AVONET has no body-length column, so mass is the size metric; the collage
 compresses it with a fractional exponent (see SIZE_EXPONENT) so big birds read
 bigger without small ones vanishing.
