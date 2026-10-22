@@ -20,6 +20,10 @@ TARGET_PAPER = (242, 237, 226)
 # quantises flat - and so does any bird brighter than it. Toned off the palette
 # white, the dither stipples the page and leaves white plumage bare. See #138.
 PANEL_PAPER = (233, 225, 202)
+# Across 50 bundled sprites, ring medians have max >= 223 (5th percentile
+# 233, median 240) and saturation <= 38 (median 13).
+PAPER_MIN = 210
+PAPER_SAT = 48
 FEATHER = 5  # gaussian blur sigma (px)
 PAD = 16  # transparent margin for the feather to bleed into
 TILE = 512  # px, repeated by kiosk.html too
@@ -125,12 +129,15 @@ def process_sprite(
     near_edge = _box_sum((~opaque).astype(np.int32), 4) > 0
     ring = near_edge & opaque
     paper = np.median(rgb[ring], axis=0) if ring.sum() > 50 else np.array(target)
+    paper_ring = ring.sum() <= 50 or (
+        paper.max() >= PAPER_MIN and paper.max() - paper.min() <= PAPER_SAT
+    )
 
     # shift paper-like pixels to the target tone (tiny shift, so pale birds are safe)
     delta = np.array(target) - paper
     dist = np.abs(rgb - paper).max(2)
     sat = rgb.max(2) - rgb.min(2)
-    paper_px = opaque & (dist < 50) & (sat < 55) & (rgb.max(2) > 160)
+    paper_px = opaque & paper_ring & (dist < 50) & (sat < 55) & (rgb.max(2) > 160)
     out = arr.copy()
     out[paper_px, :3] = np.clip(rgb[paper_px] + delta, 0, 255)
     # scans shade across the halo: level paper near the cut, outside-in and capped
