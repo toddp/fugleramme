@@ -1,6 +1,6 @@
 # Operations
 
-Running the frame day to day: the buttons, updates, ports, the BirdNET-Go address or BirdWeather station, sign-in and Wi-Fi.
+Running the frame day to day: the buttons, updates, ports, the BirdNET-Go address, BirdWeather station or camera log, sign-in and Wi-Fi.
 
 ## Buttons
 
@@ -109,6 +109,49 @@ Don't know a station? Press **Find stations…**, type a place and **Add** the n
 
 Only public stations work. The names come in the languages BirdWeather has, see
 [Languages](languages.md).
+
+## Using a wildlife camera instead
+
+The frame can also read the detection log of a wildlife camera pipeline that
+classifies motion clips with SpeciesNet and appends a line per clip:
+
+```text
+2026-10-21 20:17:57  driveway__2026-10-21t23-26-26-00-00  cricetidae family  best=0.96  frames=1/10
+2026-10-21 20:03:13  driveway__2026-10-21t19-59-22-00-00  no-confident-animal  frames=0/26
+2026-10-21 20:03:13  driveway__2026-10-21t19-59-22-00-00  no-frames-extracted
+```
+
+The fields are two spaces apart: when the line was logged, the clip
+(`<camera>__<UTC time>`), the label, the best score and the frames with the
+animal in them. Only lines with a `best=` score are detections. Each one is
+dated to when its clip was recorded, read off the clip's name, so a clip
+classified hours later still lands at the right time.
+
+On the Detector tab, set **Type** to **Wildlife camera** and enter the log's
+path under **Log file**. In a container, use `FUGLERAMME_DETECTOR_KIND=camera`
+and `FUGLERAMME_DETECTOR_LOG=/path/to/detections.log`, with the log's folder
+mounted. A log that is missing or unreadable reads as an unreachable detector,
+an empty one as nothing seen yet.
+
+The labels are the names on the page, shown as they are. To fold several labels
+into one animal, or onto the name its artwork is filed under, put an
+`aliases.json` beside the log:
+
+```json
+{"cricetidae family": "rabbit", "eastern cottontail": "rabbit", "domestic cat": "cat"}
+```
+
+Labels match whatever their case; one not in the file passes through
+unchanged. Every animal is shown, not just birds.
+
+The frame ships no mammal art. Put your own in a style folder, named for the
+label or alias (`rabbit.webp` or `.png`), under `<images>/<style>/birds/`, start
+the frame with `--images <images>` and pick the style on the admin page. One
+style is shown at a time, so birds you want beside the mammals go in the same
+folder. An animal with no art is left off the page and listed on the Detector
+tab. Sizes come from body mass: cat, fox, rabbit, skunk, squirrel, chipmunk,
+groundhog, raccoon, coyote, dog, opossum, deer, bear and turkey have one, and
+any other name is drawn at an average bird's size.
 
 ## Enabling authentication for the admin page
 
