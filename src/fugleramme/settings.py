@@ -33,6 +33,7 @@ from .render.packing import DEFAULT_LAYOUT, LAYOUTS
 from .source import (
     BIRDNET_GO,
     BIRDWEATHER,
+    CAMERA,
     DETECTOR_KINDS,
     station_fault,
     station_pages,
@@ -135,15 +136,17 @@ class Settings:
     secondary_language: str = NONE
     label_font: str = DEFAULT_FONT
     label_size: str = DEFAULT_LABEL_SIZE
-    # Which detector the frame reads: the BirdNET-Go at `detector_url`, or the
+    # Which detector the frame reads: the BirdNET-Go at `detector_url`, the
     # BirdWeather stations whose pages `detector_station` lists, separated by commas
-    # ("" until one is saved; a file from before several were read holds one page).
-    # Each keeps its own, so switching back finds the other as it was. Unsaved, the
-    # kind is BirdNET-Go: an update keeps settings.json, and one naming no kind is
-    # a BirdNET-Go's.
+    # ("" until one is saved; a file from before several were read holds one page),
+    # or the camera log at the path `detector_log` names ("" until one is saved; not
+    # `detector_url`, which only holds an http address). Each keeps its own, so
+    # switching back finds the other as it was. Unsaved, the kind is BirdNET-Go: an
+    # update keeps settings.json, and one naming no kind is a BirdNET-Go's.
     detector_kind: str = BIRDNET_GO
     detector_url: str = DEFAULT_DETECTOR_URL
     detector_station: str = ""
+    detector_log: str = ""
     # Only needed for a BirdNET-Go that authenticates. The username is not in the
     # admin: BirdNET-Go asks for a password and matches the name against a fixed
     # client id, so it is here only for an install that changed that id.
@@ -170,7 +173,9 @@ class Settings:
     @property
     def detector_address(self) -> str:
         """Where the frame reads its birds: the address of `detector_kind`'s own."""
-        return self.detector_station if self.detector_kind == BIRDWEATHER else self.detector_url
+        if self.detector_kind == BIRDWEATHER:
+            return self.detector_station
+        return self.detector_log if self.detector_kind == CAMERA else self.detector_url
 
     def oriented(self, resolution: tuple[int, int]) -> tuple[int, int]:
         """Apply the rotation's aspect to a landscape-native (w, h)."""
@@ -350,6 +355,7 @@ def _coerce(raw: dict, base: Settings | None = None) -> Settings:
         ),
         detector_url=_url(raw.get("detector_url"), d.detector_url),
         detector_station=_station(raw.get("detector_station"), d.detector_station),
+        detector_log=_text(raw.get("detector_log"), d.detector_log),
         detector_username=_text(raw.get("detector_username"), d.detector_username),
         detector_password=_text(raw.get("detector_password"), d.detector_password),
         require_sign_in=_as_bool(raw.get("require_sign_in"), d.require_sign_in),

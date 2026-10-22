@@ -32,11 +32,13 @@ from urllib.parse import urlencode, urljoin
 from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
 
 from .birdweather import BirdWeatherSource
+from .camera import CameraSource
 from .names import canonical, normalize
 from .settings import SettingsStore
 from .source import (
     BIRDNET_GO,
     BIRDWEATHER,
+    CAMERA,
     NEEDS_PASSWORD,
     Detection,
     NoSuchStation,
@@ -473,10 +475,10 @@ class Configured:
         self._timeout = timeout
         self._lock = threading.Lock()
         self._key: tuple[str, str, str, str] | None = None
-        self._source: ApiSource | BirdWeatherSource | None = None
+        self._source: ApiSource | BirdWeatherSource | CameraSource | None = None
 
     @property
-    def source(self) -> ApiSource | BirdWeatherSource:
+    def source(self) -> ApiSource | BirdWeatherSource | CameraSource:
         settings = self._store.get()
         kind, url = settings.detector_kind, settings.detector_address
         key = (kind, url, settings.detector_username, settings.detector_password)
@@ -490,9 +492,11 @@ class Configured:
 
     def _build(
         self, kind: str, url: str, username: str, password: str
-    ) -> ApiSource | BirdWeatherSource:
+    ) -> ApiSource | BirdWeatherSource | CameraSource:
         if kind == BIRDWEATHER:
             return BirdWeatherSource(url, timeout=self._timeout)
+        if kind == CAMERA:
+            return CameraSource(url)
         return ApiSource(url, username, password, timeout=self._timeout)
 
     def latest(self) -> Detection | None:
@@ -586,11 +590,21 @@ def _probe_station(url: str) -> tuple[str, str]:
     return ("ok" if all(about.values()) else "partial"), ", ".join(named)
 
 
+def _probe_log(path: str) -> tuple[str, str]:
+    """A camera log: "ok" with how many detections it holds, or "unreachable"."""
+    try:
+        heard = CameraSource(path).species_since(0)
+    except Unavailable as error:
+        return "unreachable", str(error)
+    return "ok", f"{sum(n for _name, n in heard)} detections"
+
+
 def probe(
     url: str, username: str = "", password: str = "", kind: str = BIRDNET_GO
 ) -> tuple[str, str]:
     """The admin's connection test: (state, detail), state one of "ok", "auth",
-    "names" or "unreachable" - or for BirdWeather stations, `_probe_station`'s.
+    "names" or "unreachable" - or for BirdWeather stations, `_probe_station`'s,
+    and for a camera log `_probe_log`'s.
 
     Two endpoints, because BirdNET-Go gates them differently. PrivateMode covers
     the whole API, but `/settings/*` sits behind authentication whenever any
@@ -603,6 +617,8 @@ def probe(
     """
     if kind == BIRDWEATHER:
         return _probe_station(url)
+    if kind == CAMERA:
+        return _probe_log(url)
     refused = "credentials rejected" if password else NEEDS_PASSWORD
     source = ApiSource(url, username, password)
     status, failure = _reach(source, _DETECTIONS, limit=1)

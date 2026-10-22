@@ -24,9 +24,9 @@ function showLogos(root) {
 showLogos(document);
 
 // Not queryType=species: BirdNET-Go shows only today's for that. A BirdWeather
-// station's page has no search to link into.
+// station's page has no search to link into, and a camera log no page at all.
 function linkSpecies() {
-  if (cfg.kind === "birdweather") return;
+  if (cfg.kind !== "birdnet-go") return;
   for (const a of document.querySelectorAll("#species a[data-species]")) {
     a.href = birdnet + "/ui/detections?search=" + encodeURIComponent(a.dataset.species);
   }
@@ -200,8 +200,8 @@ if (test) {
 }
 
 // Each detector type has its own fields: BirdNET-Go's address and password,
-// BirdWeather's stations. Hidden, the other type's post nothing, so their stored
-// values stand for a switch back.
+// BirdWeather's stations, a camera's log file. Hidden, the other types' post
+// nothing, so their stored values stand for a switch back.
 for (const kind of document.querySelectorAll("input[name=detector_kind]")) {
   kind.addEventListener("input", () => {  // before the form's own dirty check reads it
     for (const field of document.querySelectorAll("#detector label[data-kind], #detector div[data-kind]")) {

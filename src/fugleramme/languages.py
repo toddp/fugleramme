@@ -29,6 +29,9 @@ locale list gets any answer, 401 included, and stays offered from then on.
 A BirdWeather station has none of that: `common_names` hands over every language
 its birds are named in at once, and those are the languages offered. They cache
 under `<cache_dir>/names/birdweather.json`, with the station they name.
+
+A camera log names nothing: its labels are the names, shown as they are, and
+SCIENTIFIC is the only language without anything having failed.
 """
 
 from __future__ import annotations
@@ -46,6 +49,7 @@ from typing import Any
 from .source import (
     BIRDNET_GO,
     BIRDWEATHER,
+    CAMERA,
     NEEDS_PASSWORD,
     NoSuchStation,
     Unavailable,
@@ -212,6 +216,8 @@ def catalog(cache_dir: Path) -> dict[str, str]:
     """
     global _catalog
     with _lock:
+        if _kind() == CAMERA:
+            return {SCIENTIFIC: "Scientific"}
         if _kind() == BIRDWEATHER:
             table = _birdweather(cache_dir)[2]
             return {SCIENTIFIC: "Scientific", **{code: _language_name(code) for code in table}}
@@ -322,6 +328,8 @@ def catalog_failure() -> str:
     with the catalog rather than returned beside it: a list served off the disk
     cache is a working menu whatever the probe behind it just did."""
     with _lock:
+        if _kind() == CAMERA:
+            return ""
         if _kind() == BIRDWEATHER:
             return _translations[4] if _translations else ""
         return _catalog[5] if _catalog else ""
@@ -342,6 +350,8 @@ def dictionary(code: str, cache_dir: Path) -> tuple[dict[str, str], str]:
         return {}, ""
     global _station_locale
     with _lock:
+        if _kind() == CAMERA:
+            return {}, ""
         if _kind() == BIRDWEATHER:
             _deadline, _held, table, version, _why = _birdweather(cache_dir)
             return table.get(code, {}), version

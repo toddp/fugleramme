@@ -9,7 +9,7 @@ import pytest
 from fugleramme import check, fake
 from fugleramme.check import run
 from fugleramme.settings import SettingsStore
-from fugleramme.source import BIRDNET_GO, BIRDWEATHER
+from fugleramme.source import BIRDNET_GO, BIRDWEATHER, CAMERA
 
 
 def test_a_healthy_detector_answers_everything(detector, tmp_path, capsys):
@@ -70,16 +70,42 @@ def test_a_station_birdweather_does_not_have_is_named_as_such(detector, tmp_path
     assert "FAIL station 404            no such station" in capsys.readouterr().out
 
 
+def test_a_camera_log_answers_everything(tmp_path, capsys):
+    log = tmp_path / "detections.log"
+    log.write_text(
+        "2026-10-21 20:17:57  driveway__2026-10-21t23-26-26-00-00  cricetidae family"
+        "  best=0.96  frames=1/10\n"
+    )
+    assert run(str(log), "", "", tmp_path, CAMERA) == 0
+    out = capsys.readouterr().out
+    assert "ok   reachable              1 detections" in out
+    assert "ok   name languages         sci" in out
+
+
+def test_a_camera_log_that_is_not_there_fails(tmp_path, capsys):
+    assert run(str(tmp_path / "detections.log"), "", "", tmp_path, CAMERA) == 1
+    assert "FAIL reachable" in capsys.readouterr().out
+
+
 def test_another_detector_is_read_as_what_its_address_says(tmp_path, monkeypatch):
-    """A station's page, or its ID, is BirdWeather's whatever is saved; with no
-    address given the saved type and its own address stand."""
+    """A station's page, or its ID, is BirdWeather's whatever is saved, and a
+    path a camera's log; with no address given the saved type and its own
+    address stand."""
     config = tmp_path / "settings.json"
     station = "https://app.birdweather.com/stations/1"
     SettingsStore(config).update(detector_kind=BIRDWEATHER, detector_station=station)
     ran = []
     monkeypatch.setattr(check, "run", lambda url, _u, _p, _dir, kind: ran.append((url, kind)) or 0)
 
-    for argv in (["31086"], ["31086,15982"], ["http://pi.local:8090"], ["pi.local:8090"], []):
+    for argv in (
+        ["31086"],
+        ["31086,15982"],
+        ["http://pi.local:8090"],
+        ["pi.local:8090"],
+        ["~/critter-cam/results/detections.log"],
+        ["./detections.log"],
+        [],
+    ):
         detector = ["--detector", *argv] if argv else []
         monkeypatch.setattr(sys, "argv", ["fugleramme-check", "--config", str(config), *detector])
         try:
@@ -95,6 +121,8 @@ def test_another_detector_is_read_as_what_its_address_says(tmp_path, monkeypatch
         ),
         ("http://pi.local:8090", BIRDNET_GO),
         ("http://pi.local:8090", BIRDNET_GO),  # no scheme is plain HTTP
+        ("~/critter-cam/results/detections.log", CAMERA),
+        ("./detections.log", CAMERA),
         (station, BIRDWEATHER),
     ]
 
@@ -105,4 +133,8 @@ def test_no_station_saved_is_said_without_asking(tmp_path, monkeypatch):
     monkeypatch.setattr(check, "run", lambda *args: pytest.fail("asked BirdWeather"))
     monkeypatch.setattr(sys, "argv", ["fugleramme-check", "--config", str(config)])
     with pytest.raises(SystemExit, match="No BirdWeather station is saved"):
+        check.main()
+
+    SettingsStore(config).update(detector_kind=CAMERA)
+    with pytest.raises(SystemExit, match="No camera log is saved"):
         check.main()

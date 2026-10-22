@@ -58,6 +58,7 @@ from ..source import (
     BIRDNET_GO,
     BIRDWEATHER,
     BIRDWEATHER_SITE,
+    CAMERA,
     DETECTOR_KINDS,
     MOST_STATIONS,
     NEEDS_PASSWORD,
@@ -112,16 +113,19 @@ def form_changes(form: dict[str, list[str]]) -> dict:
 
 
 # The Detector form's type, as the reader knows each one.
-KINDS = {BIRDNET_GO: "BirdNET-Go", BIRDWEATHER: "BirdWeather station(s)"}
+KINDS = {BIRDNET_GO: "BirdNET-Go", BIRDWEATHER: "BirdWeather station(s)", CAMERA: "Wildlife camera"}
 
 
 def _logo(kind: str) -> str:
     """The detector's own favicon. admin.js loads it and shows it once it has
-    arrived, so one that cannot load leaves nothing."""
+    arrived, so one that cannot load leaves nothing. A camera log has none."""
+    if kind == CAMERA:
+        return ""
     return f'<img class="logo" data-kind="{kind}" alt="" referrerpolicy="no-referrer" hidden>'
 
 
 NO_STATION = "no station saved"
+NO_LOG = "no log file saved"
 _BIRDWEATHER_HOST = urlparse(BIRDWEATHER_SITE).hostname
 
 
@@ -271,6 +275,7 @@ _OUTAGES = {
     "auth": f"detector {NEEDS_PASSWORD}",
     "missing": "no such station",
     "unset": NO_STATION,
+    "nolog": NO_LOG,
 }
 
 
@@ -349,9 +354,18 @@ def _stations(url: str, state: str, about: dict[str, dict[str, Any] | None], rea
 _STATION_LEADS = {"ok": "connected", "partial": "connected", "unreachable": "unreachable"}
 
 
+def _log(readable: bool) -> str:
+    """A camera log's Detector row: whether the frame can read it."""
+    return _state(readable, "readable", "unreadable")
+
+
 def _status_row(settings: Settings, reading: bool, names_failure: str) -> tuple[str, str]:
     """The saved detector's state and its Detector row. BirdWeather with no
-    station saved has nothing to ask, so it says so."""
+    station saved has nothing to ask, so it says so, as does a camera with no log."""
+    if settings.detector_kind == CAMERA:
+        if not settings.detector_log:
+            return "nolog", f'<span class="bad">{NO_LOG}</span>'
+        return ("ok" if reading else "down"), _log(reading)
     if settings.detector_kind != BIRDWEATHER:
         state, version = hostinfo.detector(settings.detector_url)
         return state, _detector(state, version, reading, names_failure)
@@ -598,11 +612,11 @@ def _typed(page: str) -> str:
 
 def _detector_field(settings: Settings, refused: str, stations: str) -> str:
     """Which kind of detector the frame reads, and each kind's own fields:
-    BirdNET-Go's address and password, BirdWeather's stations. Only the chosen
-    kind's are shown; admin.js swaps them as the type changes. `refused` is the
-    type a save was just refused for and `stations` what it held: the form
-    comes back on that type, with the note under its address, since that is
-    the field to fix.
+    BirdNET-Go's address and password, BirdWeather's stations, a camera's log
+    file. Only the chosen kind's are shown; admin.js swaps them as the type
+    changes. `refused` is the type a save was just refused for and `stations`
+    what it held: the form comes back on that type, with the note under its
+    address, since that is the field to fix.
 
     A password only: the username BirdNET-Go's API insists on is a fixed client
     id (`api.CLIENT_ID`). An install that changed `security.basicauth.clientid`
@@ -625,13 +639,15 @@ def _detector_field(settings: Settings, refused: str, stations: str) -> str:
         "password",
         "(basic authentication)",
     )
+    log = _text_field("detector_log", "Log file", settings.detector_log, hint="(path)")
     return (
         _radio_field("Type", "detector_kind", kinds, chosen)
         + _shown(address, BIRDNET_GO, birdnet)
         + (note if birdnet else "")
-        + _stations_field(settings, not birdnet)
+        + _stations_field(settings, chosen == BIRDWEATHER)
         + ("" if birdnet else note)
         + _shown(password, BIRDNET_GO, birdnet)
+        + _shown(log, CAMERA, chosen == CAMERA)
     )
 
 
@@ -723,7 +739,9 @@ def birdnet_link(url: str, kind: str = BIRDNET_GO) -> tuple[str, int | None]:
 def _detector_link(settings: Settings) -> str:
     """The nav link to the detector's own pages, which admin.js points at
     `birdnet_link`. Several stations have no page between them, so the link
-    opens a list of them instead."""
+    opens a list of them instead. A camera log has no page at all."""
+    if settings.detector_kind == CAMERA:
+        return ""
     name = KINDS[settings.detector_kind].removesuffix(" station(s)")
     pages = (
         station_pages(settings.detector_station) if settings.detector_kind == BIRDWEATHER else []
@@ -759,11 +777,15 @@ def connection(form: dict[str, list[str]], settings: Settings) -> dict:
         return {"state": "refused", "text": said, "status": f'<span class="bad">{short}</span>'}
     tried = merged(settings, **changes)
     kind, url = tried.detector_kind, tried.detector_address
+    if not url and kind == CAMERA:
+        return {"state": "nolog", "text": "no log file entered", "status": _log(False)}
     if not url:
         row = f'<span class="bad">{NO_STATION}</span>'
         return {"state": "unset", "text": "no station entered", "status": row}
     state, detail = probe(url, tried.detector_username, tried.detector_password, kind)
-    if kind == BIRDWEATHER:
+    if kind == CAMERA:
+        lead, row = ("readable" if state == "ok" else "unreadable"), _log(state == "ok")
+    elif kind == BIRDWEATHER:
         lead = _STATION_LEADS.get(state, "")
         row = _stations(url, *hostinfo.stations(url), reading=state != "unreachable")
     else:
@@ -1084,8 +1106,8 @@ def page(
         panel=f"detected · {glass}" if detected else "not detected",
         detector_name=KINDS[settings.detector_kind].removesuffix(" station(s)"),
         detector_link=_detector_link(settings),
-        # Each station's line carries its own.
-        detector_logo="" if settings.detector_kind == BIRDWEATHER else _logo(BIRDNET_GO),
+        # Each station's line carries its own, and a camera log has none.
+        detector_logo=_logo(BIRDNET_GO) if settings.detector_kind == BIRDNET_GO else "",
         detector_label="Detector(s)" if settings.detector_kind == BIRDWEATHER else "Detector",
         birdnet=detector_row,
         detector_field=_detector_field(settings, refused, stations),

@@ -24,7 +24,7 @@ NEEDS_PASSWORD = "needs a password"
 BIRDNET_GO = "birdnet-go"
 BIRDWEATHER = "birdweather"
 CAMERA = "camera"
-DETECTOR_KINDS = (BIRDNET_GO, BIRDWEATHER)
+DETECTOR_KINDS = (BIRDNET_GO, BIRDWEATHER, CAMERA)
 
 # Where a bare station ID is looked up.
 BIRDWEATHER_SITE = "https://app.birdweather.com"

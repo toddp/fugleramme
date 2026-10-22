@@ -16,8 +16,11 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from fugleramme import languages
+from fugleramme.api import ApiSource, Configured
 from fugleramme.camera import CameraSource
-from fugleramme.source import Unavailable
+from fugleramme.settings import Settings, SettingsStore
+from fugleramme.source import BIRDNET_GO, CAMERA, Unavailable
 
 CAT, DEER, VOLE = "domestic cat", "white-tailed deer", "cricetidae family"
 
@@ -219,3 +222,42 @@ def test_the_log_and_aliases_are_read_again_when_they_change(tmp_path):
     with log.open("a") as appended:
         appended.write(_seen(0.5, CAT, 0.9, "driveway") + "\n")
     assert camera.latest().scientific_name == CAT
+
+
+# -- the wrapper --------------------------------------------------------------
+
+
+def test_the_configured_detector_reads_a_camera_log_for_its_kind(tmp_path):
+    log = _write(tmp_path, LOG)
+    store = SettingsStore(tmp_path / "s.json", Settings())
+    source = Configured(store)
+    assert isinstance(source.source, ApiSource)
+
+    store.update(detector_kind=CAMERA, detector_log=str(log))
+    assert isinstance(source.source, CameraSource)
+    assert (source.kind, source.base_url) == (CAMERA, str(log))
+    assert source.species_since(0) == [(CAT, 3), (DEER, 2), (VOLE, 1)]
+    with pytest.raises(Unavailable):
+        source.request("/settings/locales")  # BirdNET-Go's names: a log has none
+
+    store.update(detector_kind=BIRDNET_GO)
+    assert isinstance(source.source, ApiSource)
+
+
+def test_a_camera_log_offers_only_its_own_labels_and_no_failure(tmp_path):
+    """Nothing to ask for names is not a detector that failed to answer: the
+    admin would otherwise say "No languages: detector unreachable" in red. Nor
+    is a BirdNET-Go's dictionary left on disk a name for anything a camera saw,
+    nor the failure of the BirdNET-Go read before it its failure."""
+    cached = languages.cache_path(tmp_path, "en")
+    cached.parent.mkdir()
+    cached.write_text(json.dumps({"etag": "1", "names": {"Turdus merula": "Blackbird"}}))
+    store = SettingsStore(tmp_path / "s.json", Settings(detector_url="http://127.0.0.1:1"))
+    languages.use(Configured(store))
+    languages.catalog(tmp_path)
+    assert languages.catalog_failure() == "detector unreachable"
+
+    store.update(detector_kind=CAMERA, detector_log=str(_write(tmp_path, LOG)))
+    assert languages.catalog(tmp_path) == {"sci": "Scientific"}
+    assert languages.catalog_failure() == ""
+    assert languages.dictionary("en", tmp_path) == ({}, "")

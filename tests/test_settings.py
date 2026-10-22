@@ -27,7 +27,7 @@ from fugleramme.settings import (
     from_env,
     lookback_order,
 )
-from fugleramme.source import BIRDNET_GO, BIRDWEATHER
+from fugleramme.source import BIRDNET_GO, BIRDWEATHER, CAMERA
 
 
 def test_defaults_when_file_absent(tmp_path):
@@ -375,6 +375,18 @@ def test_a_station_is_kept_beside_birdnet_go_s_address(tmp_path):
         assert SettingsStore(path).get().detector_station == ""
 
 
+def test_a_camera_log_is_kept_beside_birdnet_go_s_address(tmp_path):
+    """A path is no http address, so it has a field of its own."""
+    store = SettingsStore(tmp_path / "settings.json")
+    saved = store.update(detector_kind=CAMERA, detector_log=" ~/critter-cam/detections.log ")
+    assert (saved.detector_log, saved.detector_address) == (
+        "~/critter-cam/detections.log",
+        "~/critter-cam/detections.log",
+    )
+    assert saved.detector_url == DEFAULT_DETECTOR_URL
+    assert store.update(detector_kind=BIRDNET_GO).detector_address == DEFAULT_DETECTOR_URL
+
+
 def test_several_stations_are_one_list_and_one_from_before_is_as_it_was(tmp_path):
     """An update keeps settings.json, so a station saved before several could be
     read must come back exactly as it was saved."""
@@ -463,6 +475,14 @@ def test_the_environment_seeds_a_station_beside_birdnet_go(monkeypatch):
     monkeypatch.setenv("FUGLERAMME_DETECTOR_STATION", "31086")
     seeded = from_env()
     assert seeded.detector_address == "https://app.birdweather.com/stations/31086"
+    assert seeded.detector_url == DEFAULT_DETECTOR_URL
+
+
+def test_the_environment_seeds_a_camera_log_beside_birdnet_go(monkeypatch):
+    monkeypatch.setenv("FUGLERAMME_DETECTOR_KIND", "camera")
+    monkeypatch.setenv("FUGLERAMME_DETECTOR_LOG", "/data/detections.log")
+    seeded = from_env()
+    assert seeded.detector_address == "/data/detections.log"
     assert seeded.detector_url == DEFAULT_DETECTOR_URL
 
 

@@ -13,10 +13,11 @@ from PIL import features
 
 from fugleramme import fake, languages, modes
 from fugleramme.birdweather import BirdWeatherSource
+from fugleramme.camera import CameraSource
 from fugleramme.config import BIRDNET_PORT, DEFAULT_DETECTOR_URL
 from fugleramme.languages import namer
 from fugleramme.settings import MARGIN_CEILING, Settings, SettingsStore, merged
-from fugleramme.source import BIRDNET_GO, BIRDWEATHER, NEEDS_PASSWORD
+from fugleramme.source import BIRDNET_GO, BIRDWEATHER, CAMERA, NEEDS_PASSWORD
 from fugleramme.status import Status
 from fugleramme.web import STATIC_DIR, admin, server
 
@@ -682,6 +683,58 @@ def test_a_station_shows_its_own_field_and_keeps_birdnet_go_s(tmp_path, station)
     assert '<input disabled type="password" name="detector_password"' in form
 
 
+_CLIP = (
+    "2026-10-21 20:17:57  driveway__2026-10-21t23-26-26-00-00  cricetidae family"
+    "  best=0.96  frames=1/10\n"
+)
+
+
+def test_a_camera_shows_its_log_field_and_keeps_the_others(tmp_path):
+    log = tmp_path / "detections.log"
+    log.write_text(_CLIP)
+    page = _page(tmp_path, CameraSource(log), detector_kind=CAMERA, detector_log=str(log))
+    form = _detector_form(page)
+
+    assert (
+        '<input type="radio" name="detector_kind" value="camera" checked> Wildlife camera' in form
+    )
+    assert 'data-kind="camera" alt' not in page  # no favicon to load
+    assert (
+        '<label data-kind="camera"><span>Log file <small>(path)</small></span>'
+        f'<input type="text" name="detector_log" value="{log}"></label>'
+    ) in form
+    assert '<label data-kind="birdnet-go" hidden><span>Address' in form
+    assert '<div class="field stations" data-kind="birdweather" data-most="5" hidden>' in form
+    assert "<h2>Wildlife camera</h2>" in page
+    assert 'id="birdnet"' not in page  # a log has no page to link to
+    assert "<dt>Detector</dt><dd><span id=" in page  # no BirdNET-Go logo either
+    row = re.search(r'<span id="detector-state">(.*?)</span></dd>', page).group(1)
+    assert row == '<span class="ok">readable</span>'
+
+
+def test_a_camera_with_no_log_says_so(tmp_path):
+    page = _page(tmp_path, CameraSource(tmp_path / "x.log"), detector_kind=CAMERA)
+    row = re.search(r'<span id="detector-state">(.*?)</span></dd>', page).group(1)
+    assert row == f'<span class="bad">{admin.NO_LOG}</span>'
+    assert f'<li class="problem">{admin.NO_LOG}. See' in page
+
+
+def test_the_connection_test_reads_a_camera_log(tmp_path):
+    log = tmp_path / "detections.log"
+    log.write_text(_CLIP)
+    settings = Settings()
+
+    def tested(path: str) -> dict:
+        return admin.connection({"detector_kind": [CAMERA], "detector_log": [path]}, settings)
+
+    readable = tested(str(log))
+    assert (readable["state"], readable["text"]) == ("ok", "readable · 1 detections")
+    assert readable["status"] == '<span class="ok">readable</span>'
+    gone = tested(str(tmp_path / "gone.log"))
+    assert (gone["state"], gone["status"]) == ("unreachable", '<span class="bad">unreadable</span>')
+    assert tested("")["state"] == "nolog"
+
+
 def test_birdnet_go_s_detector_form_asks_for_a_url_and_a_password(tmp_path, source):
     page = _page(tmp_path, source())
     form = _detector_form(page)
@@ -694,6 +747,8 @@ def test_birdnet_go_s_detector_form_asks_for_a_url_and_a_password(tmp_path, sour
     assert '<label data-kind="birdnet-go"><span>Password' in form
     assert '<div class="field stations" data-kind="birdweather" data-most="5" hidden>' in form
     assert '<input type="text" name="detector_station" value="" disabled>' in form
+    assert '<label data-kind="camera" hidden><span>Log file' in form
+    assert '<input disabled type="text" name="detector_log" value="">' in form
     assert "<h2>BirdNET-Go</h2>" in page
     assert 'class="note bad"' not in form
 
