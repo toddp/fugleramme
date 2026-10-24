@@ -1,6 +1,6 @@
 # Operations
 
-Running the frame day to day: the buttons, updates, ports, the BirdNET-Go address or BirdWeather station, sign-in and Wi-Fi.
+Running the frame day to day: the buttons, updates, ports, the BirdNET-Go address, BirdWeather station or camera log, sign-in and Wi-Fi.
 
 ## Buttons
 
@@ -109,6 +109,56 @@ Don't know a station? Press **Find stations…**, type a place and **Add** the n
 
 Only public stations work. The names come in the languages BirdWeather has, see
 [Languages](languages.md).
+
+## Using a wildlife camera instead
+
+The frame can also read the detection log of a wildlife camera pipeline that
+classifies motion clips with SpeciesNet and appends a line per clip:
+
+```text
+2026-10-21 20:17:57  driveway__2026-10-21t23-26-26-00-00  cricetidae family  best=0.96  frames=1/10
+2026-10-21 20:03:13  driveway__2026-10-21t19-59-22-00-00  no-confident-animal  frames=0/26
+2026-10-21 20:03:13  driveway__2026-10-21t19-59-22-00-00  no-frames-extracted
+```
+
+The fields are two spaces apart: when the line was logged, the clip
+(`<camera>__<UTC time>`), the label, the best score and the frames with the
+animal in them. Only lines with a `best=` score are detections. Each one is
+dated to when its clip was recorded, read off the clip's name, so a clip
+classified hours later still lands at the right time.
+
+On the Detector tab, set **Type** to **Wildlife camera** and enter the log's
+path under **Log file**. In a container, use `FUGLERAMME_DETECTOR_KIND=camera`
+and `FUGLERAMME_DETECTOR_LOG=/path/to/detections.log`, with the log's folder
+mounted. A log that is missing or unreadable reads as an unreachable detector,
+an empty one as nothing seen yet.
+
+To key the labels on scientific names like every other detector, and to name
+the animals, put an `animals.json` beside the log, one record per animal with
+its common name and the labels that fold into it:
+
+```json
+{
+  "Sylvilagus floridanus": {"name": "rabbit", "labels": ["eastern cottontail", "cricetidae family"]},
+  "Felis catus": {"name": "cat", "labels": ["domestic cat"]}
+}
+```
+
+Labels match whatever their case; one not in the file passes through
+unchanged and is shown as it is. Keys starting with `_` are comments. With
+**English** as the language the page shows each animal's name, with
+**Scientific** its scientific name. Every animal is shown, not just birds.
+
+The frame ships no mammal art. Put your own in a style folder, named for the
+scientific name (`sylvilagus-floridanus.webp` or `.png`) or for a label the
+file does not claim, under `<images>/<style>/birds/`, start
+the frame with `--images <images>` and pick the style on the admin page. One
+style is shown at a time, so birds you want beside the mammals go in the same
+folder. An animal with no art is left off the page and listed on the Detector
+tab. Sizes come from body mass, looked up by scientific name. Every bird has
+one, and so do the cat, fox, rabbit, skunk, squirrel, chipmunk, groundhog,
+raccoon, coyote, dog, opossum, deer and bear under the scientific names at the
+end of `assets/bird_sizes.csv`; any other name is drawn at an average bird's size.
 
 ## Enabling authentication for the admin page
 

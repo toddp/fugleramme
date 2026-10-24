@@ -60,8 +60,9 @@ Every setting on the admin page can be seeded with `FUGLERAMME_<NAME>`:
       FUGLERAMME_DETECTOR_URL: http://birdnet.local:8080
       FUGLERAMME_DETECTOR_PASSWORD: my-secret-password
       FUGLERAMME_DETECTOR_USERNAME: birdnet-client   # only if you changed BirdNET-Go's client id
-      FUGLERAMME_DETECTOR_KIND: birdnet-go           # birdnet-go | birdweather
+      FUGLERAMME_DETECTOR_KIND: birdnet-go           # birdnet-go | birdweather | camera
       FUGLERAMME_DETECTOR_STATION: ""                # BirdWeather station ID(s), comma-separated
+      FUGLERAMME_DETECTOR_LOG: ""                    # a wildlife camera's detections.log path
       FUGLERAMME_MODE: collage                       # collage | latest | arrival
       FUGLERAMME_WEB_RESOLUTION: 1080p               # 720p | 1080p | 1440p | 4K
       FUGLERAMME_WEB_ASPECT: "4:3"                   # 16:9 | 16:10 | 4:3 | 3:2

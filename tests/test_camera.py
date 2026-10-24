@@ -1,0 +1,349 @@
+"""What the frame reads off a wildlife camera's detection log.
+
+The same invariant as the other detectors: a log that cannot be read raises,
+and only one that holds nothing reads as no animals. Then what is the camera's
+own: lines that are not detections, clips classified long after they were
+recorded, and labels folded to scientific names, and named, by an animals file.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import os
+import time as systime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from fugleramme import languages
+from fugleramme.api import ApiSource, Configured
+from fugleramme.camera import CameraSource
+from fugleramme.names import normalize
+from fugleramme.settings import Settings, SettingsStore
+from fugleramme.source import BIRDNET_GO, CAMERA, Unavailable
+
+CAT, DEER, VOLE = "domestic cat", "white-tailed deer", "cricetidae family"
+
+# Real lines, one of each shape.
+REAL = [
+    "2026-10-21 20:03:13  driveway__2026-10-21t19-59-22-00-00  no-confident-animal  frames=0/26",
+    "2026-10-21 20:17:57  driveway__2026-10-21t23-26-26-00-00  cricetidae family  best=0.96  frames=1/10",
+    "2026-10-21 20:03:13  driveway__2026-10-21t19-59-22-00-00  no-frames-extracted",
+]
+
+NOW = datetime.now(UTC).replace(microsecond=0)
+
+
+def _ago(hours: float) -> datetime:
+    return NOW - timedelta(hours=hours)
+
+
+def _clip(camera: str, at: datetime) -> str:
+    return f"{camera}__{at.astimezone(UTC):%Y-%m-%dt%H-%M-%S}-00-00"
+
+
+def _logged(at: datetime) -> str:
+    return f"{at.astimezone():%Y-%m-%d %H:%M:%S}"
+
+
+def _seen(hours: float, label: str, best: float, camera: str, logged: float | None = None) -> str:
+    """A detection recorded `hours` ago and classified `logged` hours ago,
+    a few minutes after it was recorded unless said."""
+    at = _ago(hours)
+    stamp = _ago(logged) if logged is not None else at + timedelta(minutes=3)
+    return f"{_logged(stamp)}  {_clip(camera, at)}  {label}  best={best:.2f}  frames=1/10"
+
+
+def _nothing(hours: float, shape: str = "no-confident-animal  frames=0/26") -> str:
+    at = _ago(hours)
+    return f"{_logged(at)}  {_clip('driveway', at)}  {shape}"
+
+
+# Two cameras across two days, in the order the pipeline classified them: line 5
+# was recorded yesterday but logged minutes ago, and line 8 came in after line 7
+# though recorded earlier.
+LOG = [
+    _nothing(1),
+    _seen(20, DEER, 0.81, "backyard"),
+    _seen(2, CAT, 0.97, "driveway"),
+    _nothing(3, "no-frames-extracted"),
+    _seen(30, CAT, 0.88, "driveway", logged=0.1),
+    _seen(5, DEER, 0.75, "backyard"),
+    _seen(1, VOLE, 0.96, "backyard"),
+    _seen(4, CAT, 0.66, "driveway", logged=0.05),
+]
+
+
+def id_of(detection) -> int:
+    return detection.id
+
+
+def _write(tmp_path: Path, lines: list[str], name: str = "detections.log") -> Path:
+    path = tmp_path / name
+    path.write_text("".join(f"{line}\n" for line in lines))
+    return path
+
+
+@pytest.fixture
+def camera(tmp_path):
+    return CameraSource(_write(tmp_path, LOG))
+
+
+def _asked(source: CameraSource) -> list:
+    return [
+        source.latest,
+        source.life_list,
+        source.stats,
+        lambda: source.recent(5),
+        lambda: source.species_since(6),
+        lambda: source.species_since(0),
+        lambda: source.last_heard(24),
+    ]
+
+
+def test_a_log_that_is_not_there_raises(tmp_path):
+    for call in _asked(CameraSource(tmp_path / "detections.log")):
+        with pytest.raises(Unavailable):
+            call()
+
+
+def test_an_empty_log_reads_as_no_animals(tmp_path):
+    quiet = CameraSource(_write(tmp_path, []))
+    assert quiet.latest() is None
+    assert quiet.recent() == []
+    assert quiet.species_since(6) == []
+    assert quiet.species_since(0) == []
+    assert quiet.last_heard(24) == []
+    assert quiet.life_list() == []
+    assert quiet.stats()["total"] == 0
+
+
+def test_only_a_detection_line_is_a_detection(tmp_path):
+    """The other two shapes are clips with nothing in them."""
+    (only,) = CameraSource(_write(tmp_path, REAL)).recent()
+    assert (only.id, only.scientific_name, only.confidence, only.clip_path) == (
+        2,
+        VOLE,
+        0.96,
+        "driveway__2026-10-21t23-26-26-00-00",
+    )
+
+
+@pytest.mark.skipif(not hasattr(systime, "tzset"), reason="needs time.tzset")
+def test_a_detection_is_when_its_clip_was_recorded_in_the_frames_zone(tmp_path, monkeypatch):
+    """The clip's own UTC time, not when it was logged three hours earlier on
+    the wall clock; read off a name that says no time, the log's time."""
+    garbled = REAL[1].replace("driveway__2026-10-21t23-26-26-00-00", "driveway__clip")
+    path = _write(tmp_path, [REAL[1], garbled])
+    monkeypatch.setenv("TZ", "America/New_York")
+    systime.tzset()
+    try:
+        recorded, logged = (d.detected_at for d in sorted(CameraSource(path).recent(), key=id_of))
+    finally:
+        monkeypatch.undo()
+        systime.tzset()
+    eastern = ZoneInfo("America/New_York")
+    assert recorded == datetime(2026, 10, 21, 19, 26, 26, tzinfo=eastern)
+    assert logged == datetime(2026, 10, 21, 20, 17, 57, tzinfo=eastern)
+    assert recorded.utcoffset() == logged.utcoffset() == timedelta(hours=-4)
+
+
+def test_species_are_counted_over_the_window_most_seen_first(camera):
+    """Yesterday's cat logged minutes ago is not in the last day."""
+    assert camera.species_since(24) == [(CAT, 2), (DEER, 2), (VOLE, 1)]
+    assert camera.species_since(3) == [(VOLE, 1), (CAT, 1)]  # a tie goes by name
+    assert camera.species_since(0) == [(CAT, 3), (DEER, 2), (VOLE, 1)]
+
+
+def test_last_heard_is_most_recent_first(camera):
+    """By each species' newest detection: by its oldest, the deer would lead the cat."""
+    assert camera.last_heard(24) == [VOLE, CAT, DEER]
+    assert camera.last_heard(1.5) == [VOLE]
+    assert camera.last_heard(0) == [VOLE, CAT, DEER]
+
+
+def test_the_life_list_dates_each_species_to_its_first_detection(camera):
+    life = camera.life_list()
+    assert [(s.scientific_name, s.first_seen) for s in life] == [
+        (CAT, _ago(30)),
+        (DEER, _ago(20)),
+        (VOLE, _ago(1)),
+    ]
+
+
+def test_recent_is_newest_recorded_first_not_the_logs_order(camera):
+    assert [d.id for d in camera.recent(3)] == [7, 3, 8]
+    assert [d.id for d in camera.recent()] == [7, 3, 8, 6, 2, 5]
+    assert camera.latest() == camera.recent(1)[0]
+    assert camera.latest().detected_at == _ago(1)
+
+
+def test_stats_count_every_detection(camera):
+    stats = camera.stats()
+    assert (stats["total"], stats["species"], stats["last_24h"]) == (6, 3, 5)
+    assert stats["top"][0] == {"scientific_name": CAT, "n": 3, "best": 0.97}
+
+
+# -- the animals file ---------------------------------------------------------
+
+RABBIT, SKUNK = "Sylvilagus floridanus", "Mephitis mephitis"
+
+# As the yard's file has it: a comment, and rollup families folded to the
+# animal that has been in the frame every time.
+ANIMALS = {
+    "_comment": "The yard's animals, keyed by scientific name.",
+    RABBIT: {"name": "rabbit", "labels": ["eastern cottontail", "CRICETIDAE family"]},
+    SKUNK: {"name": "skunk", "labels": ["striped skunk", "skunk family"]},
+}
+
+
+def _animals(tmp_path: Path, animals: dict = ANIMALS, name: str = "animals.json") -> Path:
+    path = tmp_path / name
+    path.write_text(json.dumps(animals))
+    return path
+
+
+def test_animals_beside_the_log_fold_labels_to_scientific_names_whatever_their_case(tmp_path):
+    """The key the artwork, the masses and the dictionaries share; a label no
+    record claims, the cat's, reaches the frame as itself."""
+    log = _write(tmp_path, [_seen(1, "Eastern Cottontail", 0.9, "a"), *LOG])
+    _animals(tmp_path)
+    camera = CameraSource(log)
+    assert camera.species_since(0) == [(CAT, 3), (RABBIT, 2), (DEER, 2)]
+    assert camera.latest().scientific_name == RABBIT
+    assert [s.scientific_name for s in camera.life_list()] == [CAT, DEER, RABBIT]
+
+
+def test_animals_named_elsewhere_are_read_from_there(tmp_path):
+    elsewhere = _animals(tmp_path, {SKUNK: {"name": "skunk", "labels": [VOLE]}}, "yard.json")
+    _animals(tmp_path)
+    camera = CameraSource(_write(tmp_path, LOG), animals_path=elsewhere)
+    assert camera.species_since(0) == [(CAT, 3), (DEER, 2), (SKUNK, 1)]
+    assert camera.common_names() == {"en": {SKUNK: "skunk"}}
+
+
+def test_animals_that_cannot_be_read_leave_the_labels_as_they_are(tmp_path, caplog):
+    (tmp_path / "animals.json").write_text("{not json")
+    camera = CameraSource(_write(tmp_path, LOG))
+    assert camera.species_since(0) == [(CAT, 3), (DEER, 2), (VOLE, 1)]
+    assert camera.common_names() == {}
+    assert "Ignoring the camera's animals" in caplog.text
+
+
+def test_a_record_that_is_not_one_costs_only_its_own_animal(tmp_path):
+    """The file is edited by hand: one typo must not unfold the whole yard."""
+    _animals(
+        tmp_path,
+        {
+            **ANIMALS,
+            "Felis catus": {"name": "", "labels": [CAT]},
+            "Odocoileus virginianus": ["white-tailed deer"],
+            "Procyon lotor": {"name": "raccoon", "labels": [7, "northern raccoon"]},
+        },
+    )
+    camera = CameraSource(_write(tmp_path, LOG))
+    assert camera.species_since(0) == [(CAT, 3), (DEER, 2), (RABBIT, 1)]
+    assert camera.common_names() == {
+        "en": {RABBIT: "rabbit", SKUNK: "skunk", "Procyon lotor": "raccoon"}
+    }
+
+
+def test_the_log_and_animals_are_read_again_when_they_change(tmp_path):
+    log = _write(tmp_path, LOG)
+    camera = CameraSource(log)
+    assert camera.latest().scientific_name == VOLE
+    assert camera.common_names() == {}
+
+    _animals(tmp_path)
+    assert camera.latest().scientific_name == RABBIT
+    assert camera.common_names() == {"en": {RABBIT: "rabbit", SKUNK: "skunk"}}
+
+    with log.open("a") as appended:
+        appended.write(_seen(0.5, CAT, 0.9, "driveway") + "\n")
+    assert camera.latest().scientific_name == CAT
+
+
+# -- the wrapper --------------------------------------------------------------
+
+
+def test_the_configured_detector_reads_a_camera_log_for_its_kind(tmp_path):
+    log = _write(tmp_path, LOG)
+    store = SettingsStore(tmp_path / "s.json", Settings())
+    source = Configured(store)
+    assert isinstance(source.source, ApiSource)
+
+    store.update(detector_kind=CAMERA, detector_log=str(log))
+    assert isinstance(source.source, CameraSource)
+    assert (source.kind, source.base_url) == (CAMERA, str(log))
+    assert source.species_since(0) == [(CAT, 3), (DEER, 2), (VOLE, 1)]
+    with pytest.raises(Unavailable):
+        source.request("/settings/locales")  # BirdNET-Go's names: a log has none
+
+    store.update(detector_kind=BIRDNET_GO)
+    assert isinstance(source.source, ApiSource)
+
+
+def test_a_camera_offers_english_from_its_own_file_and_no_failure(tmp_path):
+    """Nothing to ask for names is not a detector that failed to answer: the
+    admin would otherwise say "No languages: detector unreachable" in red. Nor
+    is a BirdNET-Go's dictionary left on disk a name for anything a camera saw,
+    nor the failure of the BirdNET-Go read before it its failure."""
+    cached = languages.cache_path(tmp_path, "en")
+    cached.parent.mkdir()
+    cached.write_text(json.dumps({"etag": "1", "names": {"Turdus merula": "Blackbird"}}))
+    store = SettingsStore(tmp_path / "s.json", Settings(detector_url="http://127.0.0.1:1"))
+    languages.use(Configured(store))
+    languages.catalog(tmp_path)
+    assert languages.catalog_failure() == "detector unreachable"
+
+    store.update(detector_kind=CAMERA, detector_log=str(_write(tmp_path, LOG)))
+    assert languages.catalog(tmp_path) == {"sci": "Scientific", "en": "English"}
+    assert languages.catalog_failure() == ""
+    assert languages.dictionary("en", tmp_path) == ({}, "")  # no animals file yet
+
+    _animals(tmp_path)
+    names, version = languages.dictionary("en", tmp_path)
+    assert (names, bool(version)) == ({RABBIT: "rabbit", SKUNK: "skunk"}, True)
+    assert languages.dictionary("nb", tmp_path) == ({}, "")
+    assert languages.namer("en", "sci", tmp_path).label(RABBIT) == f"Rabbit\n({RABBIT})"
+
+
+def test_a_renamed_animal_is_a_new_dictionary_version(tmp_path):
+    """The version keys the page cache, so a name changed in the file shows."""
+    store = SettingsStore(tmp_path / "s.json", Settings())
+    store.update(detector_kind=CAMERA, detector_log=str(_write(tmp_path, LOG)))
+    languages.use(Configured(store))
+    _animals(tmp_path)
+    before = languages.dictionary("en", tmp_path)[1]
+
+    renamed = {**ANIMALS, RABBIT: {"name": "cottontail", "labels": ["eastern cottontail"]}}
+    animals = _animals(tmp_path, renamed)
+    stamp = animals.stat().st_mtime_ns + 1_000_000  # coarse clocks: make the change visible
+    os.utime(animals, ns=(stamp, stamp))
+    names, after = languages.dictionary("en", tmp_path)
+    assert names[RABBIT] == "cottontail"
+    assert after and after != before
+
+
+# -- sizes --------------------------------------------------------------------
+
+# The scientific names a camera's animals fold to that `bird_sizes.csv` carries
+# a mass for; the turkey's is AVONET's own.
+CAMERA_KEYS = (
+    "Ursus americanus", "Felis catus", "Tamias striatus", "Canis latrans",
+    "Odocoileus virginianus", "Canis familiaris", "Vulpes vulpes", "Marmota monax",
+    "Didelphis virginiana", "Sylvilagus floridanus", "Procyon lotor", "Mephitis mephitis",
+    "Sciurus carolinensis", "Meleagris gallopavo",
+)  # fmt: skip
+
+
+def test_every_camera_key_has_a_body_mass():
+    """Without its row an animal is drawn at the median bird's 35.5 g: a deer
+    the size of a sparrow."""
+    sizes = Path(__file__).resolve().parents[1] / "assets" / "bird_sizes.csv"
+    with sizes.open() as handle:
+        masses = {normalize(row["scientific_name"]) for row in csv.DictReader(handle)}
+    assert [key for key in CAMERA_KEYS if normalize(key) not in masses] == []

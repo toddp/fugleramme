@@ -1,5 +1,5 @@
-"""Test that a detector - a BirdNET-Go or BirdWeather stations - returns
-everything the frame needs.
+"""Test that a detector - a BirdNET-Go, BirdWeather stations or a camera log -
+returns everything the frame needs.
 
 examples:
   fugleramme-check
@@ -10,6 +10,8 @@ examples:
       test a BirdWeather station, which its ID alone also names
   fugleramme-check --detector 12345,67890
       test several BirdWeather stations, read as one
+  fugleramme-check --detector ~/critter-cam/results/detections.log
+      test a wildlife camera's detection log
 
 Set FUGLERAMME_LOG_LEVEL=DEBUG to also log every request it makes.
 """
@@ -27,11 +29,13 @@ from typing import Any
 from . import languages
 from .api import ApiSource, probe
 from .birdweather import BirdWeatherSource
+from .camera import CameraSource
 from .config import DEFAULT_CONFIG_PATH, DEFAULT_DETECTOR_URL
 from .settings import SettingsStore, from_env
 from .source import (
     BIRDNET_GO,
     BIRDWEATHER,
+    CAMERA,
     Source,
     Unavailable,
     station_id,
@@ -101,10 +105,29 @@ def _stations(source: BirdWeatherSource) -> int:
     return sum(row is None for row in about.values())
 
 
+def _source(
+    url: str, username: str, password: str, kind: str
+) -> ApiSource | BirdWeatherSource | CameraSource:
+    if kind == BIRDWEATHER:
+        return BirdWeatherSource(url)
+    if kind == CAMERA:
+        return CameraSource(url)
+    return ApiSource(url, username, password)
+
+
+def _kind_of(detector: str) -> tuple[str, str]:
+    """(address, kind) for a `--detector`, read as what it says: a path is a
+    camera log, a station's page or ID BirdWeather's, anything else BirdNET-Go."""
+    if detector.startswith(("/", "~", ".")):
+        return detector, CAMERA
+    pages = station_pages(detector)
+    if all(station_id(page) for page in pages):
+        return ", ".join(pages), BIRDWEATHER
+    return with_scheme(detector), BIRDNET_GO
+
+
 def run(url: str, username: str, password: str, cache_dir: Path, kind: str = BIRDNET_GO) -> int:
-    source: ApiSource | BirdWeatherSource = (
-        BirdWeatherSource(url) if kind == BIRDWEATHER else ApiSource(url, username, password)
-    )
+    source = _source(url, username, password, kind)
     languages.use(source)
     print(f"{url}\n")
     if isinstance(source, BirdWeatherSource):
@@ -113,7 +136,7 @@ def run(url: str, username: str, password: str, cache_dir: Path, kind: str = BIR
         started = time.monotonic()
         # The admin's own test, not a bare /health: it reads what the frame reads.
         # "names" is reachable - the locale list it holds back is the check below.
-        state, detail = probe(url, username, password)
+        state, detail = probe(url, username, password, kind)
         reachable = state in ("ok", "names")
         _line(reachable, "reachable", detail or "answered", started)
         unreached = int(not reachable)
@@ -137,8 +160,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--detector",
-        help="base URL, or BirdWeather stations' pages or IDs separated by commas "
-        f"(default: saved, or {DEFAULT_DETECTOR_URL})",
+        help="base URL, BirdWeather stations' pages or IDs separated by commas, or a "
+        f"camera log's path (default: saved, or {DEFAULT_DETECTOR_URL})",
     )
     parser.add_argument("--username", default="", help="only if BirdNET-Go's client id was changed")
     parser.add_argument("--password", default="", help="BirdNET-Go's password (default: saved)")
@@ -151,17 +174,12 @@ def main() -> None:
 
     # Same seeds as the service, so the check reports the detector it would use.
     saved = SettingsStore(args.config, from_env()).get()
-    # Another detector is read as what its address says: a station's page is BirdWeather's.
-    url, kind = saved.detector_address, saved.detector_kind
-    if args.detector:
-        pages = station_pages(args.detector)
-        url, kind = (
-            (", ".join(pages), BIRDWEATHER)
-            if all(station_id(page) for page in pages)
-            else (with_scheme(args.detector), BIRDNET_GO)
-        )
+    url, kind = (
+        _kind_of(args.detector) if args.detector else (saved.detector_address, saved.detector_kind)
+    )
     if not url:
-        sys.exit("No BirdWeather station is saved: name one with --detector")
+        unset = "camera log" if kind == CAMERA else "BirdWeather station"
+        sys.exit(f"No {unset} is saved: name one with --detector")
     sys.exit(
         run(
             url,
