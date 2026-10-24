@@ -30,7 +30,7 @@ set to. That can be any of
 
 With BirdWeather, the list is instead the languages BirdWeather has names in. A name it lacks shows as the scientific name.
 
-With a [wildlife camera](operations.md#using-a-wildlife-camera-instead), the only choice is the scientific name, which shows each label, or its alias, as it is.
+With a [wildlife camera](operations.md#using-a-wildlife-camera-instead), the choices are the scientific name and English, which shows each animal's name from the camera's `animals.json`. A label the file does not claim shows as it is in both.
 
 Dates on the page follow the primary language.
 

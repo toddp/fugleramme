@@ -133,25 +133,32 @@ and `FUGLERAMME_DETECTOR_LOG=/path/to/detections.log`, with the log's folder
 mounted. A log that is missing or unreadable reads as an unreachable detector,
 an empty one as nothing seen yet.
 
-The labels are the names on the page, shown as they are. To fold several labels
-into one animal, or onto the name its artwork is filed under, put an
-`aliases.json` beside the log:
+To key the labels on scientific names like every other detector, and to name
+the animals, put an `animals.json` beside the log, one record per animal with
+its common name and the labels that fold into it:
 
 ```json
-{"cricetidae family": "rabbit", "eastern cottontail": "rabbit", "domestic cat": "cat"}
+{
+  "Sylvilagus floridanus": {"name": "rabbit", "labels": ["eastern cottontail", "cricetidae family"]},
+  "Felis catus": {"name": "cat", "labels": ["domestic cat"]}
+}
 ```
 
 Labels match whatever their case; one not in the file passes through
-unchanged. Every animal is shown, not just birds.
+unchanged and is shown as it is. Keys starting with `_` are comments. With
+**English** as the language the page shows each animal's name, with
+**Scientific** its scientific name. Every animal is shown, not just birds.
 
 The frame ships no mammal art. Put your own in a style folder, named for the
-label or alias (`rabbit.webp` or `.png`), under `<images>/<style>/birds/`, start
+scientific name (`sylvilagus-floridanus.webp` or `.png`) or for a label the
+file does not claim, under `<images>/<style>/birds/`, start
 the frame with `--images <images>` and pick the style on the admin page. One
 style is shown at a time, so birds you want beside the mammals go in the same
 folder. An animal with no art is left off the page and listed on the Detector
-tab. Sizes come from body mass: cat, fox, rabbit, skunk, squirrel, chipmunk,
-groundhog, raccoon, coyote, dog, opossum, deer, bear and turkey have one, and
-any other name is drawn at an average bird's size.
+tab. Sizes come from body mass, looked up by scientific name. Every bird has
+one, and so do the cat, fox, rabbit, skunk, squirrel, chipmunk, groundhog,
+raccoon, coyote, dog, opossum, deer and bear under the scientific names at the
+end of `assets/bird_sizes.csv`; any other name is drawn at an average bird's size.
 
 ## Enabling authentication for the admin page
 

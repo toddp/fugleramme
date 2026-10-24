@@ -30,8 +30,9 @@ A BirdWeather station has none of that: `common_names` hands over every language
 its birds are named in at once, and those are the languages offered. They cache
 under `<cache_dir>/names/birdweather.json`, with the station they name.
 
-A camera log names nothing: its labels are the names, shown as they are, and
-SCIENTIFIC is the only language without anything having failed.
+A camera log's names are the yard's own, English, out of the animals file beside
+it (`camera.py`): English is offered beside SCIENTIFIC, read straight from the
+source with no cache since the file is local, and nothing is ever a failure.
 """
 
 from __future__ import annotations
@@ -217,7 +218,7 @@ def catalog(cache_dir: Path) -> dict[str, str]:
     global _catalog
     with _lock:
         if _kind() == CAMERA:
-            return {SCIENTIFIC: "Scientific"}
+            return {SCIENTIFIC: "Scientific", "en": _language_name("en")}
         if _kind() == BIRDWEATHER:
             table = _birdweather(cache_dir)[2]
             return {SCIENTIFIC: "Scientific", **{code: _language_name(code) for code in table}}
@@ -351,7 +352,7 @@ def dictionary(code: str, cache_dir: Path) -> tuple[dict[str, str], str]:
     global _station_locale
     with _lock:
         if _kind() == CAMERA:
-            return {}, ""
+            return _camera(code)
         if _kind() == BIRDWEATHER:
             _deadline, _held, table, version, _why = _birdweather(cache_dir)
             return table.get(code, {}), version
@@ -382,6 +383,20 @@ def dictionary(code: str, cache_dir: Path) -> tuple[dict[str, str], str]:
                 ttl = _DICT_TTL if payload is not None else _RETRY_TTL
             _dicts[code] = (time.monotonic() + ttl, station, etag, names)
         return names, etag
+
+
+def _camera(code: str) -> tuple[dict[str, str], str]:
+    """A camera's English names, versioned by what they say so a renamed animal
+    re-renders the page; ({}, "") for any other language."""
+    if code != "en":
+        return {}, ""
+    try:
+        names = _source.common_names().get("en", {})
+    except Unavailable:
+        return {}, ""
+    if not names:
+        return {}, ""
+    return names, hashlib.sha256(json.dumps(names, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def _birdweather(cache_dir: Path) -> _Translations:

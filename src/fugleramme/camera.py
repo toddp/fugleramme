@@ -15,9 +15,16 @@ detection's time: a clip can be classified hours after it was recorded.
 
 A label is a common name or a taxon ("white-tailed deer", "cricetidae family"),
 never a scientific name, and most are not birds, so this source applies no bird
-filter (`taxa.is_bird` would drop every one). An aliases file beside the log
-folds labels to the keys the artwork is filed under:
-`{"eastern cottontail": "rabbit", "cricetidae family": "rabbit"}`.
+filter (`taxa.is_bird` would drop every one). An animals file beside the log
+folds labels to scientific names, the key the artwork, the body masses and the
+label dictionaries share with every other detector, and names each animal:
+
+    {"Sylvilagus floridanus": {"name": "rabbit",
+                               "labels": ["eastern cottontail", "cricetidae family"]}}
+
+A label no record claims passes through as it is ("mammal"). The names are the
+yard's own and English, so `common_names` offers them as English; the label
+shows the scientific name only under SCIENTIFIC.
 """
 
 from __future__ import annotations
@@ -33,8 +40,8 @@ from .source import CAMERA, Detection, Species, Unavailable
 
 log = logging.getLogger(__name__)
 
-# Where the aliases are read from unless named: beside the log.
-ALIASES = "aliases.json"
+# Where the animals are read from unless named: beside the log.
+ANIMALS = "animals.json"
 
 _LINE = re.compile(
     r"(?P<logged>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)  (?P<clip>\S+)  (?P<label>.+?)"
@@ -58,27 +65,38 @@ def _recorded(clip: str, logged: str) -> datetime:
     return datetime.fromisoformat(logged).astimezone()
 
 
-def _aliases(path: Path) -> dict[str, str]:
-    """{lowercased label: display key}. Optional: no file, or one that cannot be
-    read, leaves every label as the camera gave it."""
+def _animals(path: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """({lowercased label: scientific name}, {scientific name: common name}).
+    Optional: no file, or one that cannot be read, leaves every label as the
+    camera gave it and names nothing. Keys starting with "_" are comments; a
+    record that is not one is skipped, so one typo costs only its animal."""
     try:
         loaded = json.loads(path.read_text())
     except FileNotFoundError:
-        return {}
+        return {}, {}
     except (OSError, ValueError) as error:
-        log.warning("Ignoring the camera aliases in %s: %s", path, error)
-        return {}
+        log.warning("Ignoring the camera's animals in %s: %s", path, error)
+        return {}, {}
     if not isinstance(loaded, dict):
-        log.warning("Ignoring the camera aliases in %s: not a JSON object", path)
-        return {}
-    return {
-        str(label).strip().lower(): key.strip()
-        for label, key in loaded.items()
-        if isinstance(key, str) and key.strip()
-    }
+        log.warning("Ignoring the camera's animals in %s: not a JSON object", path)
+        return {}, {}
+    folds: dict[str, str] = {}
+    names: dict[str, str] = {}
+    for key, record in loaded.items():
+        scientific = key.strip()
+        if not scientific or scientific.startswith("_") or not isinstance(record, dict):
+            continue
+        name, labels = record.get("name"), record.get("labels")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        names[scientific] = name.strip()
+        for label in labels if isinstance(labels, list) else ():
+            if isinstance(label, str) and label.strip():
+                folds[label.strip().lower()] = scientific
+    return folds, names
 
 
-def _parse(text: str, aliases: dict[str, str]) -> tuple[Detection, ...]:
+def _parse(text: str, folds: dict[str, str]) -> tuple[Detection, ...]:
     """The log's detections in line order, each numbered by its line."""
     detections = []
     for number, line in enumerate(text.splitlines(), 1):
@@ -91,7 +109,7 @@ def _parse(text: str, aliases: dict[str, str]) -> tuple[Detection, ...]:
         except ValueError:
             continue
         label = found["label"].strip()
-        name = aliases.get(label.lower(), label)
+        name = folds.get(label.lower(), label)
         detections.append(Detection(number, at, name, best, found["clip"]))
     return tuple(detections)
 
@@ -101,29 +119,32 @@ class CameraSource:
 
     kind = CAMERA
 
-    def __init__(self, path: str | Path, aliases_path: str | Path | None = None):
+    def __init__(self, path: str | Path, animals_path: str | Path | None = None):
         self.base_url = str(path)
         # Nothing to sign in to, so which log is all that tells two sources apart.
         self.station = self.base_url
         self._path = Path(path).expanduser()
-        self._aliases = (
-            Path(aliases_path).expanduser() if aliases_path else self._path.with_name(ALIASES)
+        self._animals = (
+            Path(animals_path).expanduser() if animals_path else self._path.with_name(ANIMALS)
         )
         self._held: tuple[tuple, tuple[Detection, ...]] | None = None
+        self._named: tuple[int | None, dict[str, str]] | None = None
 
     def _version(self) -> tuple:
         try:
             logged = self._path.stat()
         except OSError as error:
             raise Unavailable(f"{self._path} unreadable: {error}") from error
+        return logged.st_ino, logged.st_size, logged.st_mtime_ns, self._animals_version()
+
+    def _animals_version(self) -> int | None:
         try:
-            aliased: int | None = self._aliases.stat().st_mtime_ns
+            return self._animals.stat().st_mtime_ns
         except OSError:
-            aliased = None
-        return logged.st_ino, logged.st_size, logged.st_mtime_ns, aliased
+            return None
 
     def _detections(self) -> tuple[Detection, ...]:
-        """Parsed again only when the log or the aliases change, since one page
+        """Parsed again only when the log or the animals change, since one page
         asks for them several times over."""
         version = self._version()
         if self._held is not None and self._held[0] == version:
@@ -132,7 +153,7 @@ class CameraSource:
             text = self._path.read_text(errors="replace")
         except OSError as error:
             raise Unavailable(f"{self._path} unreadable: {error}") from error
-        detections = _parse(text, _aliases(self._aliases))
+        detections = _parse(text, _animals(self._animals)[0])
         self._held = (version, detections)
         return detections
 
@@ -183,6 +204,16 @@ class CameraSource:
             "last_24h": sum(n for _name, n in self.species_since(24)),
             "top": [{"scientific_name": name, "n": n, "best": best[name]} for name, n in ever[:10]],
         }
+
+    def common_names(self) -> dict[str, dict[str, str]]:
+        """{"en": {scientific name: common name}} off the animals file, which
+        `languages` offers as English; {} with no file. Read again only when
+        the file changes, since every render asks."""
+        version = self._animals_version()
+        if self._named is None or self._named[0] != version:
+            self._named = (version, _animals(self._animals)[1])
+        names = self._named[1]
+        return {"en": dict(names)} if names else {}
 
     def close(self) -> None:
         """Nothing held open: every call reads the file."""

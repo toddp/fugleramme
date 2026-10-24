@@ -3,13 +3,14 @@
 The same invariant as the other detectors: a log that cannot be read raises,
 and only one that holds nothing reads as no animals. Then what is the camera's
 own: lines that are not detections, clips classified long after they were
-recorded, and labels folded to artwork keys by an aliases file.
+recorded, and labels folded to scientific names, and named, by an animals file.
 """
 
 from __future__ import annotations
 
 import csv
 import json
+import os
 import time as systime
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -186,40 +187,79 @@ def test_stats_count_every_detection(camera):
     assert stats["top"][0] == {"scientific_name": CAT, "n": 3, "best": 0.97}
 
 
-# -- aliases ------------------------------------------------------------------
+# -- the animals file ---------------------------------------------------------
+
+RABBIT, SKUNK = "Sylvilagus floridanus", "Mephitis mephitis"
+
+# As the yard's file has it: a comment, and rollup families folded to the
+# animal that has been in the frame every time.
+ANIMALS = {
+    "_comment": "The yard's animals, keyed by scientific name.",
+    RABBIT: {"name": "rabbit", "labels": ["eastern cottontail", "CRICETIDAE family"]},
+    SKUNK: {"name": "skunk", "labels": ["striped skunk", "skunk family"]},
+}
 
 
-def test_aliases_beside_the_log_fold_labels_whatever_their_case(tmp_path):
+def _animals(tmp_path: Path, animals: dict = ANIMALS, name: str = "animals.json") -> Path:
+    path = tmp_path / name
+    path.write_text(json.dumps(animals))
+    return path
+
+
+def test_animals_beside_the_log_fold_labels_to_scientific_names_whatever_their_case(tmp_path):
+    """The key the artwork, the masses and the dictionaries share; a label no
+    record claims, the cat's, reaches the frame as itself."""
     log = _write(tmp_path, [_seen(1, "Eastern Cottontail", 0.9, "a"), *LOG])
-    (tmp_path / "aliases.json").write_text(
-        json.dumps({"CRICETIDAE family": "rabbit", "eastern cottontail": "rabbit"})
-    )
+    _animals(tmp_path)
     camera = CameraSource(log)
-    assert camera.species_since(0) == [(CAT, 3), ("rabbit", 2), (DEER, 2)]
-    assert camera.latest().scientific_name == "rabbit"
-    assert [s.scientific_name for s in camera.life_list()] == [CAT, DEER, "rabbit"]
+    assert camera.species_since(0) == [(CAT, 3), (RABBIT, 2), (DEER, 2)]
+    assert camera.latest().scientific_name == RABBIT
+    assert [s.scientific_name for s in camera.life_list()] == [CAT, DEER, RABBIT]
 
 
-def test_aliases_named_elsewhere_are_read_from_there(tmp_path):
-    elsewhere = tmp_path / "elsewhere.json"
-    elsewhere.write_text(json.dumps({VOLE: "rabbit"}))
-    (tmp_path / "aliases.json").write_text(json.dumps({CAT: "cat"}))
-    camera = CameraSource(_write(tmp_path, LOG), aliases_path=elsewhere)
-    assert camera.species_since(0) == [(CAT, 3), (DEER, 2), ("rabbit", 1)]
+def test_animals_named_elsewhere_are_read_from_there(tmp_path):
+    elsewhere = _animals(tmp_path, {SKUNK: {"name": "skunk", "labels": [VOLE]}}, "yard.json")
+    _animals(tmp_path)
+    camera = CameraSource(_write(tmp_path, LOG), animals_path=elsewhere)
+    assert camera.species_since(0) == [(CAT, 3), (DEER, 2), (SKUNK, 1)]
+    assert camera.common_names() == {"en": {SKUNK: "skunk"}}
 
 
-def test_aliases_that_cannot_be_read_leave_the_labels_as_they_are(tmp_path):
-    (tmp_path / "aliases.json").write_text("{not json")
-    assert CameraSource(_write(tmp_path, LOG)).species_since(0) == [(CAT, 3), (DEER, 2), (VOLE, 1)]
+def test_animals_that_cannot_be_read_leave_the_labels_as_they_are(tmp_path, caplog):
+    (tmp_path / "animals.json").write_text("{not json")
+    camera = CameraSource(_write(tmp_path, LOG))
+    assert camera.species_since(0) == [(CAT, 3), (DEER, 2), (VOLE, 1)]
+    assert camera.common_names() == {}
+    assert "Ignoring the camera's animals" in caplog.text
 
 
-def test_the_log_and_aliases_are_read_again_when_they_change(tmp_path):
+def test_a_record_that_is_not_one_costs_only_its_own_animal(tmp_path):
+    """The file is edited by hand: one typo must not unfold the whole yard."""
+    _animals(
+        tmp_path,
+        {
+            **ANIMALS,
+            "Felis catus": {"name": "", "labels": [CAT]},
+            "Odocoileus virginianus": ["white-tailed deer"],
+            "Procyon lotor": {"name": "raccoon", "labels": [7, "northern raccoon"]},
+        },
+    )
+    camera = CameraSource(_write(tmp_path, LOG))
+    assert camera.species_since(0) == [(CAT, 3), (DEER, 2), (RABBIT, 1)]
+    assert camera.common_names() == {
+        "en": {RABBIT: "rabbit", SKUNK: "skunk", "Procyon lotor": "raccoon"}
+    }
+
+
+def test_the_log_and_animals_are_read_again_when_they_change(tmp_path):
     log = _write(tmp_path, LOG)
     camera = CameraSource(log)
     assert camera.latest().scientific_name == VOLE
+    assert camera.common_names() == {}
 
-    (tmp_path / "aliases.json").write_text(json.dumps({VOLE: "rabbit"}))
-    assert camera.latest().scientific_name == "rabbit"
+    _animals(tmp_path)
+    assert camera.latest().scientific_name == RABBIT
+    assert camera.common_names() == {"en": {RABBIT: "rabbit", SKUNK: "skunk"}}
 
     with log.open("a") as appended:
         appended.write(_seen(0.5, CAT, 0.9, "driveway") + "\n")
@@ -246,7 +286,7 @@ def test_the_configured_detector_reads_a_camera_log_for_its_kind(tmp_path):
     assert isinstance(source.source, ApiSource)
 
 
-def test_a_camera_log_offers_only_its_own_labels_and_no_failure(tmp_path):
+def test_a_camera_offers_english_from_its_own_file_and_no_failure(tmp_path):
     """Nothing to ask for names is not a detector that failed to answer: the
     admin would otherwise say "No languages: detector unreachable" in red. Nor
     is a BirdNET-Go's dictionary left on disk a name for anything a camera saw,
@@ -260,17 +300,43 @@ def test_a_camera_log_offers_only_its_own_labels_and_no_failure(tmp_path):
     assert languages.catalog_failure() == "detector unreachable"
 
     store.update(detector_kind=CAMERA, detector_log=str(_write(tmp_path, LOG)))
-    assert languages.catalog(tmp_path) == {"sci": "Scientific"}
+    assert languages.catalog(tmp_path) == {"sci": "Scientific", "en": "English"}
     assert languages.catalog_failure() == ""
-    assert languages.dictionary("en", tmp_path) == ({}, "")
+    assert languages.dictionary("en", tmp_path) == ({}, "")  # no animals file yet
+
+    _animals(tmp_path)
+    names, version = languages.dictionary("en", tmp_path)
+    assert (names, bool(version)) == ({RABBIT: "rabbit", SKUNK: "skunk"}, True)
+    assert languages.dictionary("nb", tmp_path) == ({}, "")
+    assert languages.namer("en", "sci", tmp_path).label(RABBIT) == f"Rabbit\n({RABBIT})"
+
+
+def test_a_renamed_animal_is_a_new_dictionary_version(tmp_path):
+    """The version keys the page cache, so a name changed in the file shows."""
+    store = SettingsStore(tmp_path / "s.json", Settings())
+    store.update(detector_kind=CAMERA, detector_log=str(_write(tmp_path, LOG)))
+    languages.use(Configured(store))
+    _animals(tmp_path)
+    before = languages.dictionary("en", tmp_path)[1]
+
+    renamed = {**ANIMALS, RABBIT: {"name": "cottontail", "labels": ["eastern cottontail"]}}
+    animals = _animals(tmp_path, renamed)
+    stamp = animals.stat().st_mtime_ns + 1_000_000  # coarse clocks: make the change visible
+    os.utime(animals, ns=(stamp, stamp))
+    names, after = languages.dictionary("en", tmp_path)
+    assert names[RABBIT] == "cottontail"
+    assert after and after != before
 
 
 # -- sizes --------------------------------------------------------------------
 
-# The keys a camera's aliases fold to that `bird_sizes.csv` carries a mass for.
+# The scientific names a camera's animals fold to that `bird_sizes.csv` carries
+# a mass for; the turkey's is AVONET's own.
 CAMERA_KEYS = (
-    "bear", "cat", "chipmunk", "coyote", "deer", "dog", "fox", "groundhog", "opossum",
-    "rabbit", "raccoon", "skunk", "squirrel", "turkey",
+    "Ursus americanus", "Felis catus", "Tamias striatus", "Canis latrans",
+    "Odocoileus virginianus", "Canis familiaris", "Vulpes vulpes", "Marmota monax",
+    "Didelphis virginiana", "Sylvilagus floridanus", "Procyon lotor", "Mephitis mephitis",
+    "Sciurus carolinensis", "Meleagris gallopavo",
 )  # fmt: skip
 
 
@@ -280,4 +346,4 @@ def test_every_camera_key_has_a_body_mass():
     sizes = Path(__file__).resolve().parents[1] / "assets" / "bird_sizes.csv"
     with sizes.open() as handle:
         masses = {normalize(row["scientific_name"]) for row in csv.DictReader(handle)}
-    assert [key for key in CAMERA_KEYS if key not in masses] == []
+    assert [key for key in CAMERA_KEYS if normalize(key) not in masses] == []

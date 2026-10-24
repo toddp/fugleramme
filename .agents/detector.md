@@ -31,10 +31,10 @@ Covers `source.py`, `api.py`, `birdweather.py`, `camera.py`, `taxa.py`, `languag
 
 ## A wildlife camera (`camera.py`)
 
-- **Not a bird detector.** A camera pipeline's SpeciesNet labels are common names and taxa ("white-tailed deer", "cricetidae family"), never scientific names, and mostly mammals - so this source alone skips `taxa.is_bird`, which would drop every one. The labels are the species keys as they stand, after `aliases.json` beside the log folds them (case-insensitively) to the keys the art is filed under. Their body masses are the lowercase rows at the end of `bird_sizes.csv`.
+- **Not a bird detector.** A camera pipeline's SpeciesNet labels are common names and taxa ("white-tailed deer", "cricetidae family"), never scientific names, and mostly mammals - so this source alone skips `taxa.is_bird`, which would drop every one. The species keys are scientific names, as for every other detector: `animals.json` beside the log folds labels (case-insensitively) to them and names each animal, and a label it does not claim stays the key as it stands. Their body masses are hand-added rows keyed by scientific name at the end of `bird_sizes.csv`.
 - A line is a detection only with a `best=` score. Its time is the clip's, read off the clip name (`<camera>__<Blink's UTC time, slugged>`), not the log's: the pipeline can classify a clip hours after it was recorded. The slug drops the offset's sign, so only `-00-00` reads as a time; anything else falls back to the log's local stamp.
-- A path is no http address, so the log has its own setting, `detector_log`, rather than sharing `detector_url`'s validation. Missing or unreadable is `Unavailable`; empty is no animals. The file is parsed again only when its or the aliases' stat changes.
-- `languages` offers a camera nothing but `sci`, with no failure: there is no name source to have failed, and a BirdNET-Go's dictionaries or failure left from before must not show through.
+- A path is no http address, so the log has its own setting, `detector_log`, rather than sharing `detector_url`'s validation. Missing or unreadable is `Unavailable`; empty is no animals. The file is parsed again only when its or the animals file's stat changes.
+- `languages` offers a camera `sci` and `en`, the names in its animals file through `common_names`, with no failure: a missing file is no names, not a source that failed, and a BirdNET-Go's dictionaries or failure left from before must not show through.
 
 ## The detector owns the names (`languages.py`)
 

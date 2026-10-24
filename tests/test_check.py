@@ -79,7 +79,7 @@ def test_a_camera_log_answers_everything(tmp_path, capsys):
     assert run(str(log), "", "", tmp_path, CAMERA) == 0
     out = capsys.readouterr().out
     assert "ok   reachable              1 detections" in out
-    assert "ok   name languages         sci" in out
+    assert "ok   name languages         en, sci" in out  # English from its animals file
 
 
 def test_a_camera_log_that_is_not_there_fails(tmp_path, capsys):

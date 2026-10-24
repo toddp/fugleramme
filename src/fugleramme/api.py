@@ -532,10 +532,10 @@ class Configured:
         return source.request(path, method, headers, params)
 
     def common_names(self) -> dict[str, dict[str, str]]:
-        """A BirdWeather station's names, which `languages` reads instead of
-        asking `request`."""
+        """A BirdWeather station's names, or a camera's from its animals file,
+        which `languages` reads instead of asking `request`."""
         source = self.source
-        if not isinstance(source, BirdWeatherSource):
+        if not isinstance(source, (BirdWeatherSource, CameraSource)):
             raise Unavailable(f"{source.base_url} names its birds through `request`")
         return source.common_names()
 

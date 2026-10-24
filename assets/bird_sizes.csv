@@ -10660,17 +10660,16 @@ Zosterornis latistriatus,29.5
 Zosterornis nigrorum,21.6
 Zosterornis striatus,13.9
 Zosterornis whiteheadi,21.9
-bear,100000
-cat,4200
-chipmunk,100
-coyote,13000
-deer,70000
-dog,20000
-fox,5500
-groundhog,4000
-opossum,2800
-rabbit,1200
-raccoon,6500
-skunk,2500
-squirrel,500
-turkey,5791.4
+Ursus americanus,100000
+Felis catus,4200
+Tamias striatus,100
+Canis latrans,13000
+Odocoileus virginianus,70000
+Canis familiaris,20000
+Vulpes vulpes,5500
+Marmota monax,4000
+Didelphis virginiana,2800
+Sylvilagus floridanus,1200
+Procyon lotor,6500
+Mephitis mephitis,2500
+Sciurus carolinensis,500
