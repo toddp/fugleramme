@@ -171,6 +171,7 @@ Fugleramme shares no code or art with them.
 
 ## Built on fugleramme
 
+- [tesserae-widget-fugleramme](https://github.com/dmellok/tesserae-widget-fugleramme) - fugleramme modes and art as a widget for Tesserae
 - [fugleramme-samsung-frame](https://github.com/conradj/fugleramme-samsung-frame) - sends the collage to a Samsung Frame TV in Art Mode
 - [birdnet-frame](https://github.com/icecoldfire/birdnet-frame) - a Docker container that sends the collage to a Samsung Frame TV in Art Mode
 - [birdnet_eink](https://github.com/Sidiox/birdnet_eink) - the artwork on a LilyGO T5 4.7" ESP32 e-ink display
