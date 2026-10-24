@@ -2,6 +2,111 @@
 
 <!-- version list -->
 
+## v0.29.0 (2026-10-22)
+
+### Bug Fixes
+
+- #263 offer BirdWeather in the installer
+  ([`6185efe`](https://github.com/arnegiacomo/fugleramme/commit/6185efe1a5e3023b6f81ea8f4091e7eb708f01db))
+
+- #294 read each timestamp at its own season's UTC offset
+  ([#301](https://github.com/arnegiacomo/fugleramme/pull/301),
+  [`6b265b5`](https://github.com/arnegiacomo/fugleramme/commit/6b265b5a74d0f5a88f37bfdf54ada6ed735378ad))
+
+- #302 pick each bird's variant by day, so residents show their other plates
+  ([#304](https://github.com/arnegiacomo/fugleramme/pull/304),
+  [`09bb86d`](https://github.com/arnegiacomo/fugleramme/commit/09bb86db55af31cdffc2c561a951a27beecca8b2))
+
+- Bump inky to 2.6.0 for the 13.3" busy wait
+  ([`562f263`](https://github.com/arnegiacomo/fugleramme/commit/562f2637b0c1911d56979cbd553041501eb7587d))
+
+- Clear a stale index.lock before the update checks out
+  ([#298](https://github.com/arnegiacomo/fugleramme/pull/298),
+  [`baaa998`](https://github.com/arnegiacomo/fugleramme/commit/baaa9988853ddf4f36f98b63fef7e42f48d675c8))
+
+- Hold the page when a render fails and roll back a failed update
+  ([#292](https://github.com/arnegiacomo/fugleramme/pull/292),
+  [`c105646`](https://github.com/arnegiacomo/fugleramme/commit/c105646051f4526ac96d07cbc443c110c533757b))
+
+- Read each detection at its own UTC offset
+  ([#306](https://github.com/arnegiacomo/fugleramme/pull/306),
+  [`3caf540`](https://github.com/arnegiacomo/fugleramme/commit/3caf540b5c22b805ee022b5403d1c40129c6169b))
+
+- Treat an unreadable detector answer as unavailable and forget expired answers
+  ([#296](https://github.com/arnegiacomo/fugleramme/pull/296),
+  [`83cccb2`](https://github.com/arnegiacomo/fugleramme/commit/83cccb23abca18b4c471351ae7cd179d0a9fa74d))
+
+- Upgrade ca-certificates when building the image
+  ([`08e413f`](https://github.com/arnegiacomo/fugleramme/commit/08e413f054ce6cb5b7878af561ddb1cd6b19bdc7))
+
+- **render**: #76 draw panel labels in mode "1" for FreeType's mono hinting
+  ([#285](https://github.com/arnegiacomo/fugleramme/pull/285),
+  [`44bc109`](https://github.com/arnegiacomo/fugleramme/commit/44bc1090c8eb89b2d1351589ddc17dbc68828659))
+
+### Chores
+
+- Add pi-test skill ([#284](https://github.com/arnegiacomo/fugleramme/pull/284),
+  [`d09c0f6`](https://github.com/arnegiacomo/fugleramme/commit/d09c0f6243ef7a4b1fc1818b0d8d83328c0f7667))
+
+- Pin BirdNET-Go 20261014
+  ([`dd18b99`](https://github.com/arnegiacomo/fugleramme/commit/dd18b99f083fb0b13d9c3a37ae0b1e75f927f77f))
+
+- **assets**: #268 add Spizelloides arborea, found by @blazedsonic
+  ([`0624603`](https://github.com/arnegiacomo/fugleramme/commit/06246034be40b629ecc9a906157e95ebfe7d0125))
+
+- **assets**: #33 add four Haliaeetus leucocephalus
+  ([#300](https://github.com/arnegiacomo/fugleramme/pull/300),
+  [`cde521a`](https://github.com/arnegiacomo/fugleramme/commit/cde521a8d0f95e5e08deec9938e19c8fedfe35eb))
+
+- **assets**: #33 add Geothlypis formosa, Vireo griseus and Contopus virens
+  ([#270](https://github.com/arnegiacomo/fugleramme/pull/270),
+  [`6a9478f`](https://github.com/arnegiacomo/fugleramme/commit/6a9478f370e767b46b0b16fbc2885b70e0ea47a9))
+
+- **assets**: #33 add Sayornis nigricans
+  ([#282](https://github.com/arnegiacomo/fugleramme/pull/282),
+  [`6202169`](https://github.com/arnegiacomo/fugleramme/commit/6202169be40529dcd388389bf5beb44c2a42e9ad))
+
+- **assets**: #33 add Setophaga palmarum
+  ([#303](https://github.com/arnegiacomo/fugleramme/pull/303),
+  [`910bc18`](https://github.com/arnegiacomo/fugleramme/commit/910bc18b9f7abbc7892812e632cbe5d01b2e46e7))
+
+- **assets**: Resize sialia-sialis-2 ([#295](https://github.com/arnegiacomo/fugleramme/pull/295),
+  [`1a73c1c`](https://github.com/arnegiacomo/fugleramme/commit/1a73c1c404c53f2c3877705af1b42660dab95040))
+
+- **tools**: Add zoom and pan to the plate review
+  ([`4090a47`](https://github.com/arnegiacomo/fugleramme/commit/4090a47e06e53256ea0b068aaefa6eb6894f3cfa))
+
+### Documentation
+
+- Ask artwork contributors for one PR at a time
+  ([`fda1d3a`](https://github.com/arnegiacomo/fugleramme/commit/fda1d3a1956112a5e115b735290b2f2f303401b0))
+
+- Mark the GOSIM Spotlight as past
+  ([`4c41f77`](https://github.com/arnegiacomo/fugleramme/commit/4c41f772a0574e4348f6ff722b1acf97d536fc8b))
+
+- Show GOSIM and Trendshift badges in the readme
+  ([`0054484`](https://github.com/arnegiacomo/fugleramme/commit/0054484c75128892684cf00b723145b1a9ff566a))
+
+### Features
+
+- #262 find BirdWeather stations near a place
+  ([`5f92c3c`](https://github.com/arnegiacomo/fugleramme/commit/5f92c3c9f3cdb6405e8efe5ceaa857269c7cebe5))
+
+- #262 read birds from BirdWeather stations
+  ([`8dd47fb`](https://github.com/arnegiacomo/fugleramme/commit/8dd47fb201d51382c694c04fc4c106045317d3ec))
+
+- Add a home-screen icon and favicon ([#283](https://github.com/arnegiacomo/fugleramme/pull/283),
+  [`4f379ad`](https://github.com/arnegiacomo/fugleramme/commit/4f379adea683ce2f46292a735310d4af9dfc7318))
+
+- Keep the latest heard species under a limit
+  ([`3a7000c`](https://github.com/arnegiacomo/fugleramme/commit/3a7000c872d79d074521d228f51d8789120ddec7))
+
+### Testing
+
+- Keep the service tests off a real panel
+  ([`5e00d9b`](https://github.com/arnegiacomo/fugleramme/commit/5e00d9b00309ef7df2326969d4f456e899ea8b7b))
+
+
 ## v0.28.1 (2026-10-15)
 
 ### Bug Fixes

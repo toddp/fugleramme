@@ -145,6 +145,9 @@ class Settings:
     # update keeps settings.json, and one naming no kind is a BirdNET-Go's.
     detector_kind: str = BIRDNET_GO
     detector_url: str = DEFAULT_DETECTOR_URL
+    # Where a browser reaches the same BirdNET-Go, for the admin's links, when the
+    # address above is one only the frame can use. "" links `detector_url`.
+    detector_public_url: str = ""
     detector_station: str = ""
     detector_log: str = ""
     # Only needed for a BirdNET-Go that authenticates. The username is not in the
@@ -354,6 +357,7 @@ def _coerce(raw: dict, base: Settings | None = None) -> Settings:
             str(raw.get("detector_kind", d.detector_kind)), DETECTOR_KINDS, d.detector_kind
         ),
         detector_url=_url(raw.get("detector_url"), d.detector_url),
+        detector_public_url=_url(raw.get("detector_public_url"), d.detector_public_url),
         detector_station=_station(raw.get("detector_station"), d.detector_station),
         detector_log=_text(raw.get("detector_log"), d.detector_log),
         detector_username=_text(raw.get("detector_username"), d.detector_username),
