@@ -49,6 +49,38 @@ def _flat(sprite: np.ndarray) -> np.ndarray:
     return np.asarray(process_sprite(Image.fromarray(sprite), (0, 0), textured=False)).astype(int)
 
 
+def test_a_tight_cutout_keeps_its_colours():
+    size, radius = 100, 40
+    y, x = np.mgrid[:size, :size]
+    disc = (x - size // 2) ** 2 + (y - size // 2) ** 2 <= radius**2
+    highlight = disc & (y < size // 2 + 5)
+    sprite = np.zeros((size, size, 4), np.uint8)
+    sprite[disc] = (70, 60, 45, 255)
+    sprite[highlight] = (200, 200, 200, 255)
+
+    processed = _flat(sprite)[PAD:-PAD, PAD:-PAD]
+
+    assert np.abs(processed[highlight, :3] - sprite[highlight, :3]).max() <= 1
+    assert np.abs(processed[disc & ~highlight, :3] - sprite[disc & ~highlight, :3]).max() <= 1
+
+
+def test_a_paper_ring_is_shifted_to_the_target():
+    size, radius, ring_width = 100, 40, 6
+    y, x = np.mgrid[:size, :size]
+    distance = (x - size // 2) ** 2 + (y - size // 2) ** 2
+    disc = distance <= radius**2
+    paper_ring = disc & (distance > (radius - ring_width) ** 2)
+    sprite = np.zeros((size, size, 4), np.uint8)
+    sprite[disc] = (70, 60, 45, 255)
+    sprite[paper_ring] = (240, 235, 224, 255)
+
+    processed = np.asarray(
+        process_sprite(Image.fromarray(sprite), (0, 0), target=TARGET_PAPER, textured=False)
+    )[PAD:-PAD, PAD:-PAD]
+
+    assert np.all(processed[paper_ring, :3] == TARGET_PAPER)
+
+
 def test_levelling_stays_near_the_cut_and_within_its_cap(monkeypatch):
     size, cut, ink = 200, 20, 32
     sprite = np.zeros((size, size, 4), np.uint8)
